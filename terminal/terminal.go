@@ -1,41 +1,46 @@
 package terminal
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
 	term "golang.org/x/crypto/ssh/terminal"
 )
 
-const (
-	newLine  = "\r\n"
-	asciiEsc = 27
-)
-
 type Terminal struct {
-	prompt []byte
-	term   *os.File
-	echo   bool
+	prompt   []byte
+	term     *os.File
+	echo     bool
+	printHex bool
 
-	state *term.State
+	oldstate *term.State
 }
 
-func NewTerminal(fd uintptr) *Terminal {
+func New(fd uintptr) (*Terminal, error) {
+	if !term.IsTerminal(int(fd)) {
+		return nil, errors.New("file descriptor is not a valid terminal")
+	}
+
 	return &Terminal{
 		term: os.NewFile(fd, "terminal"),
 		echo: true,
-	}
+	}, nil
+}
+
+func (t *Terminal) SetHexDebug() {
+	t.printHex = true
 }
 
 func (t *Terminal) SetRawMode() error {
 	var err error
-	t.state, err = term.MakeRaw(int(t.term.Fd()))
+	t.oldstate, err = term.MakeRaw(int(t.term.Fd()))
 	return err
 }
 
 func (t *Terminal) Close() error {
-	if t.state != nil {
-		return term.Restore(int(t.term.Fd()), t.state)
+	if t.oldstate != nil {
+		return term.Restore(int(t.term.Fd()), t.oldstate)
 	}
 	return nil
 }
@@ -57,9 +62,10 @@ func (t *Terminal) ReadPassword() ([]byte, error) {
 
 func (t *Terminal) read() ([]byte, error) {
 	line := make([]byte, 1024)
-	t.Write(t.prompt)
+	t.printPrompt()
 
 	i := 0
+inputLoop:
 	for {
 		var err error
 		line[i], err = t.readByte()
@@ -67,20 +73,29 @@ func (t *Terminal) read() ([]byte, error) {
 			return line[:i], err
 		}
 
-		if line[i] == 3 {
+		switch line[i] {
+		case asciiETX: // Ctrl-C
 			i = 0
-			fmt.Fprint(t.term, "\r", "\033[K")
-			t.Write(t.prompt)
+			t.eraseLine()
+			t.printPrompt()
+			continue
+		case asciiCarriageReturn: // Enter
+			t.WriteString(newLine)
+			break inputLoop
+		case asciiDEL: // Backspace
+			i -= 1
+			t.eraseLine()
+			t.printPrompt()
+			t.WriteBytes(line[:i])
 			continue
 		}
 
-		if line[i] == 13 {
-			fmt.Fprint(t.term, newLine)
-			break
-		}
-
 		if t.echo {
-			fmt.Fprintf(t.term, "%c", line[i])
+			if t.printHex {
+				fmt.Fprintf(t.term, "%X ", line[i])
+			} else {
+				fmt.Fprintf(t.term, "%c", line[i])
+			}
 		}
 
 		i++
@@ -89,14 +104,26 @@ func (t *Terminal) read() ([]byte, error) {
 	return line[:i], nil
 }
 
+func (t *Terminal) eraseLine() {
+	fmt.Fprint(t.term, "\r", vt100EraseToLineEnd)
+}
+
+func (t *Terminal) printPrompt() {
+	t.WriteBytes(t.prompt)
+}
+
 func (t *Terminal) readByte() (byte, error) {
 	b := make([]byte, 1)
 	_, err := t.term.Read(b)
 	return b[0], err
 }
 
-func (t *Terminal) Write(p []byte) (int, error) {
-	return fmt.Fprint(t.term, string(p))
+func (t *Terminal) WriteBytes(p []byte) (int, error) {
+	return t.WriteString(string(p))
+}
+
+func (t *Terminal) WriteString(p string) (int, error) {
+	return fmt.Fprint(t.term, p)
 }
 
 func (t *Terminal) Println(a ...interface{}) {
