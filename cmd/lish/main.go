@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/lfkeitel/lish/exec"
+	"github.com/lfkeitel/lish/shell"
 	"github.com/lfkeitel/lish/terminal"
 )
 
@@ -22,13 +24,13 @@ func main() {
 	fmt.Println("Welcome to Lish")
 	fmt.Println("Type a command to begin")
 
-	term, err := terminal.New(os.Stdin.Fd())
+	term, err := terminal.New()
 	if err != nil {
 		panic(err)
 	}
 	defer term.Close()
 	term.SetPrompt(">> ")
-	if err := term.SetRawMode(); err != nil {
+	if err := term.EnableRawMode(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
@@ -48,6 +50,9 @@ func main() {
 			break
 		}
 
-		term.Println(string(line))
+		term.DisableRawMode()
+		args := shell.ParseShellArgs(string(line))
+		exec.Run(args[0], args[1:], nil, "")
+		term.EnableRawMode()
 	}
 }
