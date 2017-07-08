@@ -9,7 +9,6 @@ import (
 )
 
 type Terminal struct {
-	prompt   []byte
 	stdin    *os.File
 	stdout   *os.File
 	echo     bool
@@ -54,24 +53,20 @@ func (t *Terminal) Close() error {
 	return nil
 }
 
-func (t *Terminal) SetPrompt(prompt string) {
-	t.prompt = []byte(prompt)
+func (t *Terminal) ReadLine(prompt string) (string, error) {
+	return t.read(prompt)
 }
 
-func (t *Terminal) ReadLine() ([]byte, error) {
-	return t.read()
-}
-
-func (t *Terminal) ReadPassword() ([]byte, error) {
+func (t *Terminal) ReadPassword(prompt string) (string, error) {
 	t.echo = false
-	line, err := t.read()
+	line, err := t.read(prompt)
 	t.echo = true
 	return line, err
 }
 
-func (t *Terminal) read() ([]byte, error) {
+func (t *Terminal) read(prompt string) (string, error) {
 	line := make([]byte, 1024)
-	t.printPrompt()
+	t.WriteString(prompt)
 
 	i := 0
 inputLoop:
@@ -79,14 +74,14 @@ inputLoop:
 		var err error
 		line[i], err = t.readByte()
 		if err != nil {
-			return line[:i], err
+			return string(line[:i]), err
 		}
 
 		switch line[i] {
 		case asciiETX: // Ctrl-C
 			i = 0
 			t.eraseLine()
-			t.printPrompt()
+			t.WriteString(prompt)
 			continue
 		case asciiCarriageReturn: // Enter
 			t.WriteString(newLine)
@@ -94,7 +89,7 @@ inputLoop:
 		case asciiDEL: // Backspace
 			i -= 1
 			t.eraseLine()
-			t.printPrompt()
+			t.WriteString(prompt)
 			t.WriteBytes(line[:i])
 			continue
 		}
@@ -110,15 +105,11 @@ inputLoop:
 		i++
 	}
 
-	return line[:i], nil
+	return string(line[:i]), nil
 }
 
 func (t *Terminal) eraseLine() {
 	fmt.Fprint(t.stdout, "\r", vt100EraseToLineEnd)
-}
-
-func (t *Terminal) printPrompt() {
-	t.WriteBytes(t.prompt)
 }
 
 func (t *Terminal) readByte() (byte, error) {
