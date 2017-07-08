@@ -10,21 +10,23 @@ import (
 
 type Terminal struct {
 	prompt   []byte
-	term     *os.File
+	stdin    *os.File
+	stdout   *os.File
 	echo     bool
 	printHex bool
 
 	oldstate *term.State
 }
 
-func New(fd uintptr) (*Terminal, error) {
-	if !term.IsTerminal(int(fd)) {
+func New() (*Terminal, error) {
+	if !term.IsTerminal(int(os.Stdin.Fd())) {
 		return nil, errors.New("file descriptor is not a valid terminal")
 	}
 
 	return &Terminal{
-		term: os.NewFile(fd, "terminal"),
-		echo: true,
+		stdin:  os.Stdin,
+		stdout: os.Stdout,
+		echo:   true,
 	}, nil
 }
 
@@ -32,15 +34,22 @@ func (t *Terminal) SetHexDebug() {
 	t.printHex = true
 }
 
-func (t *Terminal) SetRawMode() error {
+func (t *Terminal) EnableRawMode() error {
 	var err error
-	t.oldstate, err = term.MakeRaw(int(t.term.Fd()))
+	t.oldstate, err = term.MakeRaw(int(t.stdin.Fd()))
 	return err
+}
+
+func (t *Terminal) DisableRawMode() error {
+	if t.oldstate != nil {
+		return term.Restore(int(t.stdin.Fd()), t.oldstate)
+	}
+	return nil
 }
 
 func (t *Terminal) Close() error {
 	if t.oldstate != nil {
-		return term.Restore(int(t.term.Fd()), t.oldstate)
+		return term.Restore(int(t.stdin.Fd()), t.oldstate)
 	}
 	return nil
 }
@@ -92,9 +101,9 @@ inputLoop:
 
 		if t.echo {
 			if t.printHex {
-				fmt.Fprintf(t.term, "%X ", line[i])
+				fmt.Fprintf(t.stdout, "%X ", line[i])
 			} else {
-				fmt.Fprintf(t.term, "%c", line[i])
+				fmt.Fprintf(t.stdout, "%c", line[i])
 			}
 		}
 
@@ -105,7 +114,7 @@ inputLoop:
 }
 
 func (t *Terminal) eraseLine() {
-	fmt.Fprint(t.term, "\r", vt100EraseToLineEnd)
+	fmt.Fprint(t.stdout, "\r", vt100EraseToLineEnd)
 }
 
 func (t *Terminal) printPrompt() {
@@ -114,7 +123,7 @@ func (t *Terminal) printPrompt() {
 
 func (t *Terminal) readByte() (byte, error) {
 	b := make([]byte, 1)
-	_, err := t.term.Read(b)
+	_, err := t.stdin.Read(b)
 	return b[0], err
 }
 
@@ -123,9 +132,9 @@ func (t *Terminal) WriteBytes(p []byte) (int, error) {
 }
 
 func (t *Terminal) WriteString(p string) (int, error) {
-	return fmt.Fprint(t.term, p)
+	return fmt.Fprint(t.stdout, p)
 }
 
 func (t *Terminal) Println(a ...interface{}) {
-	fmt.Fprint(t.term, append(a, newLine)...)
+	fmt.Fprint(t.stdout, append(a, newLine)...)
 }
