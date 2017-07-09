@@ -2,7 +2,6 @@ package shell
 
 import (
 	"os"
-	"path/filepath"
 
 	"github.com/lfkeitel/lish/env"
 	"github.com/lfkeitel/lish/exec"
@@ -63,7 +62,7 @@ func (s *Shell) Run() error {
 	}
 
 	for {
-		line, err := s.terminal.ReadLine(s.env.GetDefault("PS1", defaultPrompt))
+		line, err := s.terminal.ReadLine(s.env.GetDefault("LISH_PROMPT", defaultPrompt))
 		if err != nil {
 			return err
 		}
@@ -75,32 +74,37 @@ func (s *Shell) Run() error {
 
 		s.terminal.AddHistory(line)
 
-		if args[0] == "cd" {
-			path, _ := filepath.Abs(args[1])
-			if !isDir(path) {
-				s.terminal.Println("Path ", path, " doesn't exist or isn't a directory")
-				continue
-			}
-			s.pwd = path
-			os.Chdir(path)
-			continue
-		} else if args[0] == "pwd" {
-			s.terminal.Println(s.pwd)
-			continue
-		} else if args[0] == "exit" {
+		if args[0] == "exit" {
 			break
 		}
 
-		if s.exec {
-			s.terminal.DisableRawMode()
-			err = exec.Run(args[0], args[1:], s.env, s.pwd)
-			s.terminal.EnableRawMode()
+		if !s.exec {
+			continue
 		}
 
+		if f, exists := builtins[args[0]]; exists {
+			if err := f(s, args[1:]); err != nil {
+				s.Println(err.Error())
+			}
+			continue
+		}
+
+		s.terminal.DisableRawMode()
+		err = exec.Run(args[0], args[1:], s.env, s.pwd)
+		s.terminal.EnableRawMode()
+
 		if err != nil {
-			s.terminal.Println(err.Error())
+			s.Println(err.Error())
 		}
 	}
 
 	return nil
+}
+
+func (s *Shell) Println(a ...interface{}) {
+	s.terminal.Println(a...)
+}
+
+func (s *Shell) GetEnv() *env.Environment {
+	return s.env
 }
