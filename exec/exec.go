@@ -7,7 +7,7 @@ import (
 	"github.com/lfkeitel/lish/env"
 )
 
-func Run(name string, args []string, env env.Environment, cd string) error {
+func Run(name string, args []string, env *env.Environment, cd string) error {
 	cmd := exec.Command(name, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
