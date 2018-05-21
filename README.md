@@ -27,7 +27,6 @@ Run the built binary `./lish`. The shell will start with a simple dollar sign pr
 ## TODO
 
 - Tests
-- Multiline commands
 - Run commands in the background
 - Implement pipes and redirections
 - Implement a scripting language (based on Nitrogen)

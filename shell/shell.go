@@ -2,6 +2,7 @@ package shell
 
 import (
 	"os"
+	"runtime/debug"
 
 	"github.com/lfkeitel/lish/env"
 	"github.com/lfkeitel/lish/exec"
@@ -54,6 +55,7 @@ func (s *Shell) Run() error {
 		if err := recover(); err != nil {
 			s.terminal.DisableRawMode()
 			s.terminal.Println(err)
+			s.terminal.Println(string(debug.Stack()))
 		}
 	}()
 

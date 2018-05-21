@@ -1,4 +1,4 @@
 .PHONY: all
 
 all:
-	go build -o lish cmd/lish/main.go
+	go build -o bin/lish cmd/lish/main.go

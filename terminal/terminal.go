@@ -26,10 +26,11 @@ type Terminal struct {
 	stdout   io.Writer
 	echo     bool
 	printHex bool
-	realLine []byte
+	realLine [][]byte
 	//	virtualLine []byte
 	prompt    string
 	cursorPos int
+	lineNum   int
 
 	oldstate *term.State
 
@@ -110,12 +111,12 @@ inputLoop:
 	for {
 		nextByte, err := t.readByte()
 		if err != nil {
-			return string(t.realLine), err
+			return string(t.realLine[t.lineNum]), err
 		}
 
 		if t.printHex {
 			fmt.Fprintf(t.stdout, "%X ", nextByte)
-			t.realLine = append(t.realLine, nextByte)
+			t.realLine[t.lineNum] = append(t.realLine[t.lineNum], nextByte)
 			if nextByte == asciiCarriageReturn {
 				t.WriteString(newLine)
 				break inputLoop
@@ -130,6 +131,16 @@ inputLoop:
 			t.printLine()
 			continue
 		case asciiCarriageReturn: // Enter
+			lineLen := len(t.realLine[t.lineNum])
+			if t.cursorPos == lineLen && t.realLine[t.lineNum][lineLen-1] == '\\' {
+				t.realLine[t.lineNum] = t.realLine[t.lineNum][:lineLen-1]
+				t.realLine = append(t.realLine, make([]byte, 0, lineSize))
+				t.lineNum++
+				t.cursorPos = 0
+				t.WriteString(newLine)
+				t.printLine()
+				continue
+			}
 			t.WriteString(newLine)
 			break inputLoop
 		case asciiDEL: // Backspace
@@ -140,14 +151,14 @@ inputLoop:
 			continue
 		}
 
-		if t.cursorPos == len(t.realLine) {
-			t.realLine = append(t.realLine, nextByte)
+		if t.cursorPos == len(t.realLine[t.lineNum]) {
+			t.realLine[t.lineNum] = append(t.realLine[t.lineNum], nextByte)
 		} else {
 			// Avoid a second allocation by using copy instead of two appends
 			// https://github.com/golang/go/wiki/SliceTricks#insert
-			t.realLine = append(t.realLine, 0)
-			copy(t.realLine[t.cursorPos+1:], t.realLine[t.cursorPos:])
-			t.realLine[t.cursorPos] = nextByte
+			t.realLine[t.lineNum] = append(t.realLine[t.lineNum], 0)
+			copy(t.realLine[t.lineNum][t.cursorPos+1:], t.realLine[t.lineNum][t.cursorPos:])
+			t.realLine[t.lineNum][t.cursorPos] = nextByte
 		}
 
 		t.cursorPos++
@@ -157,7 +168,15 @@ inputLoop:
 		}
 	}
 
-	return string(t.realLine), nil
+	var finalLine []byte
+	for _, line := range t.realLine {
+		if line[len(line)-1] == '\\' {
+			finalLine = append(finalLine, line[:len(line)-1]...)
+		} else {
+			finalLine = append(finalLine, line...)
+		}
+	}
+	return string(finalLine), nil
 }
 
 func (t *Terminal) handleEscape() {
@@ -196,8 +215,8 @@ func (t *Terminal) lastHistory() {
 	if t.currHistItem > 0 {
 		t.currHistItem--
 	}
-	t.realLine = []byte(t.hist.Get(t.currHistItem))
-	t.cursorPos = len(t.realLine)
+	t.realLine[t.lineNum] = []byte(t.hist.Get(t.currHistItem))
+	t.cursorPos = len(t.realLine[t.lineNum])
 	t.printLine()
 }
 
@@ -212,13 +231,13 @@ func (t *Terminal) nextHistory() {
 		return
 	}
 
-	t.realLine = []byte(t.hist.Get(t.currHistItem))
-	t.cursorPos = len(t.realLine)
+	t.realLine[t.lineNum] = []byte(t.hist.Get(t.currHistItem))
+	t.cursorPos = len(t.realLine[t.lineNum])
 	t.printLine()
 }
 
 func (t *Terminal) moveToEnd() {
-	t.cursorPos = len(t.realLine)
+	t.cursorPos = len(t.realLine[t.lineNum])
 	t.printLine()
 }
 
@@ -229,7 +248,7 @@ func (t *Terminal) moveToHome() {
 }
 
 func (t *Terminal) moveRight() {
-	if t.cursorPos == len(t.realLine) {
+	if t.cursorPos == len(t.realLine[t.lineNum]) {
 		return
 	}
 	t.cursorPos++
@@ -249,23 +268,25 @@ func (t *Terminal) backspaceChar() {
 		return
 	}
 
-	t.realLine = append(t.realLine[:t.cursorPos-1], t.realLine[t.cursorPos:]...)
+	t.realLine[t.lineNum] = append(t.realLine[t.lineNum][:t.cursorPos-1], t.realLine[t.lineNum][t.cursorPos:]...)
 	t.cursorPos--
 	t.printLine()
 }
 
 func (t *Terminal) deleteCursorChar() {
-	if t.cursorPos == len(t.realLine) {
+	if t.cursorPos == len(t.realLine[t.lineNum]) {
 		return
 	}
 
-	t.realLine = append(t.realLine[:t.cursorPos], t.realLine[t.cursorPos+1:]...)
+	t.realLine[t.lineNum] = append(t.realLine[t.lineNum][:t.cursorPos], t.realLine[t.lineNum][t.cursorPos+1:]...)
 	t.printLine()
 }
 
 func (t *Terminal) eraseLine() {
-	t.realLine = make([]byte, 0, lineSize)
+	t.realLine = make([][]byte, 1, 5)
+	t.realLine[0] = make([]byte, 0, lineSize)
 	t.cursorPos = 0
+	t.lineNum = 0
 }
 
 func (t *Terminal) readByte() (byte, error) {
@@ -277,10 +298,14 @@ func (t *Terminal) readByte() (byte, error) {
 func (t *Terminal) printLine() {
 	t.WriteString("\r")
 	t.WriteString(vt100EraseToLineEnd)
-	t.WriteString(t.prompt)
-	t.WriteBytes(t.realLine)
-	if t.cursorPos != len(t.realLine) {
-		t.moveCursorLeft(len(t.realLine) - t.cursorPos)
+	if t.lineNum == 0 {
+		t.WriteString(t.prompt)
+	} else {
+		t.WriteString("> ")
+	}
+	t.WriteBytes(t.realLine[t.lineNum])
+	if t.cursorPos != len(t.realLine[t.lineNum]) {
+		t.moveCursorLeft(len(t.realLine[t.lineNum]) - t.cursorPos)
 	}
 }
 
