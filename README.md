@@ -1,27 +1,29 @@
-# LISH
+# Lish
 
-Lish is a unix shell emulator written in Go. I made it to learn about terminal manipulation and processing.
+Lish is a unix shell emulator written in Rust. I made it to learn about terminal
+manipulation and processing.
 
 ## Building
 
-Clone the repository then run `make`.
+Clone the repository then run `cargo build`.
 
 ## Using
 
-Run the built binary `./lish`. The shell will start with a simple dollar sign prompt. Type in your command and have fun.
+Run the built binary `./target/debug/lish`. The shell will start with a simple
+dollar sign prompt. Type in your command and have fun.
 
 ## What can Lish do?
 
-- History (up/down arrow keys)
-- Line editing (left/right arrow keys, DEL, Home, End, etc.)
-- Ctrl-c to quit current command
-- Custom prompt (set the variable `LISH_PROMPT`)
+- ~~History (up/down arrow keys)~~
+- ~~Line editing (left/right arrow keys, DEL, Home, End, etc.)~~ Only backspace for now.
+- ~~Ctrl-c to quit current command~~
+- ~~Custom prompt (set the variable `LISH_PROMPT`)~~
 
 ## Builtins
 
-- `pwd` - Print current working directory
-- `cd` - Change directories
-- `def` - Set environment variables: `def name "value"`
+- ~~`pwd` - Print current working directory~~
+- ~~`cd` - Change directories~~
+- ~~`def` - Set environment variables: `def name "value"`~~
 - `exit` - Exit Lish
 
 ## TODO
@@ -29,7 +31,7 @@ Run the built binary `./lish`. The shell will start with a simple dollar sign pr
 - Tests
 - Run commands in the background
 - Implement pipes and redirections
-- Implement a scripting language (based on Nitrogen)
+- Implement a scripting language
   - If statements
   - Loops
   - Functions
@@ -37,4 +39,4 @@ Run the built binary `./lish`. The shell will start with a simple dollar sign pr
   - Hashmaps
   - Standard library
     - Rather small, just a few necessities I find missing in Bash/ZSH
-- Implement compiled versions of scripts
+- Implement compiled versions of scripts (maybe?)
