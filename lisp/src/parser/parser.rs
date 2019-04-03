@@ -59,7 +59,7 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse(mut self) -> Result<ast::Node, ParserError> {
-        let mut forms = ast::list::List::new();
+        let mut elems = Vec::new();
 
         while self.cur_tok.ttype != TokenType::EOF {
             let res: Result<ast::Node, ParserError> = match self.cur_tok.ttype {
@@ -78,14 +78,19 @@ impl<'a> Parser<'a> {
             };
 
             match res {
-                Ok(node) => forms = forms.append(node),
+                Ok(node) => elems.push(node),
                 Err(e) => return Err(e),
             };
 
             self.read_token()
         }
 
-        Ok(ast::Node::List(Rc::new(forms)))
+        Ok(ast::Node::List(Rc::new(
+            elems
+                .into_iter()
+                .rev()
+                .fold(ast::list::ConsList::new(), |acc, elem| acc.append(elem)),
+        )))
     }
 
     fn read_token(&mut self) {
@@ -101,6 +106,8 @@ impl<'a> Parser<'a> {
                 .next()
                 .unwrap_or_else(|| token::Token::simple(TokenType::EOF, 0, 0, ""));
         }
+
+        // println!("{:?}", self.cur_tok);
     }
 
     // Utility methods
@@ -139,14 +146,14 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_list(&mut self) -> Result<ast::Node, ParserError> {
-        let mut form = ast::list::List::new();
+        let mut elems = Vec::new();
         self.read_token();
 
         while !self.cur_token_is(TokenType::RPAREN) {
             match self.cur_tok.ttype {
                 TokenType::SYMBOL => {
                     let s = ast::Symbol::new(&self.cur_tok.literal);
-                    form = form.append(ast::Node::Symbol(Rc::new(s)));
+                    elems.push(ast::Node::Symbol(Rc::new(s)));
                     self.read_token();
                 }
 
@@ -157,12 +164,17 @@ impl<'a> Parser<'a> {
                             self.cur_tok.file, self.cur_tok.line, self.cur_tok.col,
                         ))
                     })?;
-                    form = form.append(ast::Node::Number(n));
+                    elems.push(ast::Node::Number(n));
                     self.read_token();
                 }
 
                 TokenType::STRING => {
-                    form = form.append(ast::Node::String(self.cur_tok.literal.clone()));
+                    elems.push(ast::Node::String(self.cur_tok.literal.clone()));
+                    self.read_token();
+                }
+
+                TokenType::LPAREN => {
+                    elems.push(self.parse_list()?);
                     self.read_token();
                 }
 
@@ -177,7 +189,12 @@ impl<'a> Parser<'a> {
             };
         }
 
-        Ok(ast::Node::List(Rc::new(form)))
+        Ok(ast::Node::List(Rc::new(
+            elems
+                .into_iter()
+                .rev()
+                .fold(ast::list::ConsList::new(), |acc, elem| acc.append(elem)),
+        )))
     }
 }
 

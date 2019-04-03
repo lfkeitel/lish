@@ -1,14 +1,15 @@
 pub mod list;
 
+use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
-use list::List;
+use list::ConsList;
 
 pub enum Node {
     Symbol(Rc<Symbol>),
     Number(u64),
     String(String),
-    List(Rc<List<Node>>),
+    List(Rc<ConsList<Node>>),
     Function(Rc<Function>),
 }
 
@@ -44,13 +45,43 @@ impl Symbol {
     pub fn new(name: &str) -> Self {
         Symbol {
             name: name.to_uppercase().to_owned(),
-            value: None,
+            value: Some(Rc::new(Node::String(name.to_owned()))),
             function: None,
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn to_val_string(&self) -> String {
+        if let Some(val) = &self.value {
+            if let Node::String(s) = val.as_ref() {
+                s.to_owned()
+            } else {
+                format!("{}", val)
+            }
+        } else {
+            self.name.to_owned()
         }
     }
 }
 
+impl Hash for Symbol {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.name.hash(state);
+    }
+}
+
+impl PartialEq for Symbol {
+    fn eq(&self, other: &Symbol) -> bool {
+        self.name == other.name
+    }
+}
+
+impl Eq for Symbol {}
+
 pub struct Function {
-    params: Rc<List<Node>>,
-    body: Rc<List<Node>>,
+    params: Rc<ConsList<Node>>,
+    body: Rc<ConsList<Node>>,
 }
