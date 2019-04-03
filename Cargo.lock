@@ -7,8 +7,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "lish"
 version = "0.1.0"
 dependencies = [
+ "lisp 0.1.0",
  "termion 1.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
+
+[[package]]
+name = "lisp"
+version = "0.1.0"
 
 [[package]]
 name = "redox_syscall"

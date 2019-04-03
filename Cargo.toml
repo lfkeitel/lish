@@ -1,8 +1,6 @@
-[package]
-name = "lish"
-version = "0.1.0"
-authors = ["Lee Keitel <lee@keitel.xyz>"]
-edition = "2018"
+[workspace]
 
-[dependencies]
-termion = "1.5"
+members = [
+    "lish",
+    "lisp",
+]
