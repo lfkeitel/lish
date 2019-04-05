@@ -1,8 +1,7 @@
 use std::fmt;
-use std::rc::Rc;
 
 use super::token::{self, Token, TokenType};
-use crate::ast;
+use crate::object;
 
 pub enum ParserError {
     InvalidCode(String),
@@ -58,11 +57,11 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse(mut self) -> Result<ast::Node, ParserError> {
-        let mut elems = Vec::new();
+    pub fn parse(mut self) -> Result<object::Program, ParserError> {
+        let mut forms = Vec::new();
 
         while self.cur_tok.ttype != TokenType::EOF {
-            let res: Result<ast::Node, ParserError> = match self.cur_tok.ttype {
+            let res: Result<object::Node, ParserError> = match self.cur_tok.ttype {
                 // Skip empty lines
                 TokenType::COMMENT => {
                     self.read_token();
@@ -78,19 +77,19 @@ impl<'a> Parser<'a> {
             };
 
             match res {
-                Ok(node) => elems.push(node),
+                Ok(node) => forms.push(node),
                 Err(e) => return Err(e),
             };
 
             self.read_token()
         }
 
-        Ok(ast::Node::List(Rc::new(
-            elems
-                .into_iter()
-                .rev()
-                .fold(ast::list::ConsList::new(), |acc, elem| acc.append(elem)),
-        )))
+        Ok(forms
+            .into_iter()
+            .rev()
+            .fold(object::cons_list::ConsList::new(), |acc, elem| {
+                acc.append(elem.into_ref())
+            }))
     }
 
     fn read_token(&mut self) {
@@ -107,7 +106,7 @@ impl<'a> Parser<'a> {
                 .unwrap_or_else(|| token::Token::simple(TokenType::EOF, 0, 0, ""));
         }
 
-        // println!("{:?}", self.cur_tok);
+        // dbg!(&self.cur_tok);
     }
 
     // Utility methods
@@ -115,19 +114,19 @@ impl<'a> Parser<'a> {
         self.cur_tok.ttype == t
     }
 
-    fn parse_err(&self, msg: &str) -> ParserError {
-        ParserError::InvalidCode(format!(
-            "{} on line {} in {}",
-            msg, self.cur_tok.line, self.cur_tok.file
-        ))
-    }
+    // fn parse_err(&self, msg: &str) -> ParserError {
+    //     ParserError::InvalidCode(format!(
+    //         "{} on line {} in {}",
+    //         msg, self.cur_tok.line, self.cur_tok.file
+    //     ))
+    // }
 
-    fn token_err(&self, t: TokenType) -> ParserError {
-        ParserError::ExpectedToken(format!(
-            "expected {} on line {} in {}, got {}",
-            t, self.cur_tok.line, self.cur_tok.file, self.cur_tok.ttype
-        ))
-    }
+    // fn token_err(&self, t: TokenType) -> ParserError {
+    //     ParserError::ExpectedToken(format!(
+    //         "expected {} on line {} in {}, got {}",
+    //         t, self.cur_tok.line, self.cur_tok.file, self.cur_tok.ttype
+    //     ))
+    // }
 
     fn tokens_err(&self, t: &[TokenType]) -> ParserError {
         ParserError::ExpectedToken(format!(
@@ -136,24 +135,24 @@ impl<'a> Parser<'a> {
         ))
     }
 
-    fn expect_token(&mut self, t: TokenType) -> Result<(), ParserError> {
-        self.read_token();
-        if !self.cur_token_is(t) {
-            Err(self.token_err(t))
-        } else {
-            Ok(())
-        }
-    }
+    // fn expect_token(&mut self, t: TokenType) -> Result<(), ParserError> {
+    //     self.read_token();
+    //     if !self.cur_token_is(t) {
+    //         Err(self.token_err(t))
+    //     } else {
+    //         Ok(())
+    //     }
+    // }
 
-    fn parse_list(&mut self) -> Result<ast::Node, ParserError> {
+    fn parse_list(&mut self) -> Result<object::Node, ParserError> {
         let mut elems = Vec::new();
         self.read_token();
 
         while !self.cur_token_is(TokenType::RPAREN) {
             match self.cur_tok.ttype {
                 TokenType::SYMBOL => {
-                    let s = ast::Symbol::new(&self.cur_tok.literal);
-                    elems.push(ast::Node::Symbol(Rc::new(s)));
+                    let s = object::Symbol::new(&self.cur_tok.literal);
+                    elems.push(object::Node::Symbol(s.into_ref()));
                     self.read_token();
                 }
 
@@ -164,12 +163,12 @@ impl<'a> Parser<'a> {
                             self.cur_tok.file, self.cur_tok.line, self.cur_tok.col,
                         ))
                     })?;
-                    elems.push(ast::Node::Number(n));
+                    elems.push(object::Node::Number(n));
                     self.read_token();
                 }
 
                 TokenType::STRING => {
-                    elems.push(ast::Node::String(self.cur_tok.literal.clone()));
+                    elems.push(object::Node::String(self.cur_tok.literal.clone()));
                     self.read_token();
                 }
 
@@ -189,12 +188,14 @@ impl<'a> Parser<'a> {
             };
         }
 
-        Ok(ast::Node::List(Rc::new(
+        Ok(object::Node::List(
             elems
                 .into_iter()
                 .rev()
-                .fold(ast::list::ConsList::new(), |acc, elem| acc.append(elem)),
-        )))
+                .fold(object::cons_list::ConsList::new(), |acc, elem| {
+                    acc.append(elem.into_ref())
+                }),
+        ))
     }
 }
 

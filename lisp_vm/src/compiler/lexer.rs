@@ -197,7 +197,6 @@ fn is_symbol(ch: u8) -> bool {
         || ch == b'!'
         || ch == b'&'
         || ch == b'%'
-        || ch == b'.'
 }
 
 fn is_letter(ch: u8) -> bool {
