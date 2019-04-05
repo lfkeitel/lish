@@ -1,9 +1,0 @@
-[package]
-name = "lisp"
-version = "0.1.0"
-authors = ["Lee Keitel <lee@keitel.xyz>"]
-edition = "2018"
-
-[dependencies]
-lisp_vm = { path = "../lisp_vm" }
-clap = "2.*"
