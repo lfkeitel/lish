@@ -1,7 +1,7 @@
 [[package]]
 name = "lazuli_vm"
 version = "0.1.0"
-source = "git+https://github.com/lfkeitel/lazuli-lisp#3c1d77d50dcebcf2b8f39b9bd37cc18037e181ce"
+source = "git+https://github.com/lfkeitel/lazuli-lisp#235cfeddfa8bd56ffb6f8cda83ac7f4d99d29eac"
 
 [[package]]
 name = "lazy_static"
