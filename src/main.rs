@@ -1,7 +1,9 @@
 mod terminal;
 
+use clap::{App, Arg};
 use terminal::Terminal;
 
+use lazuli_vm::compiler;
 use lazuli_vm::compiler::lexer::{ByteIter, Lexer};
 use lazuli_vm::compiler::parser::Parser;
 use lazuli_vm::object::cons_list::ConsList;
@@ -13,21 +15,63 @@ use path_absolutize::*;
 use std::collections::HashMap;
 use std::env;
 use std::path;
+use std::path::Path;
 use std::process::{Command, Stdio};
 
 const PROMPT: &str = "lish$ ";
 
 fn main() {
-    let mut term = Terminal::new();
+    let app = App::new("Lish")
+        .version("0.1.0")
+        .author("Lee Keitel")
+        .about("Lazuli Lisp Shell")
+        .arg(Arg::with_name("FILE"))
+        .get_matches();
 
+    match app.value_of("FILE") {
+        Some(f) => compile_file(f),
+        None => interactive_shell(),
+    }
+}
+
+fn compile_file(path: &str) {
+    let src_path = Path::new(path);
+    let code = compiler::compile_file(src_path).unwrap_or_else(|e| {
+        eprintln!("{}", e);
+        ::std::process::exit(1);
+    });
+
+    let mut vm = setup_vm(false);
+    if let Err(e) = vm.run(&code) {
+        eprintln!("Error: {}", e);
+    }
+}
+
+fn setup_vm(interactive: bool) -> VM {
     let mut vm = VM::new();
+    // Builtin Functions
     vm.add_symbol(Symbol::with_builtin("exit", shell_exit).into_ref());
     vm.add_symbol(Symbol::with_builtin("pwd", shell_pwd).into_ref());
     vm.add_symbol(Symbol::with_builtin("cd", shell_cd).into_ref());
     vm.add_symbol(Symbol::with_builtin("call", shell_call).into_ref());
-    vm.add_symbol(Symbol::with_value("interactive", Node::bool_obj(true)).into_ref());
+    vm.add_symbol(Symbol::with_builtin("export", shell_export).into_ref());
+    vm.add_symbol(Symbol::with_builtin("unexport", shell_unexport).into_ref());
+
+    // Predefined variables
+    vm.add_symbol(Symbol::with_value("interactive", Node::bool_obj(interactive)).into_ref());
+    vm.add_symbol(Symbol::with_value("last_status", Node::Number(0)).into_ref());
+
+    for (key, value) in env::vars() {
+        vm.add_symbol(Symbol::with_value(&key, Node::from_string(value)).into_ref());
+    }
 
     vm.set_cmd_not_found(Callable::Builtin(shell_call));
+    vm
+}
+
+fn interactive_shell() {
+    let mut term = Terminal::new();
+    let mut vm = setup_vm(true);
 
     loop {
         let mut line = term.readline(&PROMPT);
@@ -41,7 +85,7 @@ fn main() {
         let tree = match parser.parse() {
             Ok(t) => t,
             Err(e) => {
-                println!("{}", e);
+                eprintln!("{}", e);
                 continue;
             }
         };
@@ -52,13 +96,29 @@ fn main() {
                     println!("{}", v);
                 }
             }
-            Err(e) => println!("{}", e),
+            Err(e) => eprintln!("{}", e),
         }
     }
 }
 
-fn shell_exit(_vm: &mut VM, _args: ConsList<Node>) -> Result<Node, String> {
-    ::std::process::exit(0);
+fn shell_exit(vm: &mut VM, args: ConsList<Node>) -> Result<Node, String> {
+    let args = args_setup!(args);
+    let status = if !args.is_empty() {
+        match vm.eval(args[0])? {
+            Node::Number(n) => {
+                if n >= 0 && n <= 255 {
+                    n as i32
+                } else {
+                    255 // Not between 0 - 255
+                }
+            }
+            _ => 255, // Not a Number
+        }
+    } else {
+        0 // No argument
+    };
+
+    ::std::process::exit(status);
 }
 
 fn shell_pwd(_vm: &mut VM, _args: ConsList<Node>) -> Result<Node, String> {
@@ -131,7 +191,7 @@ fn shell_call(vm: &mut VM, args: ConsList<Node>) -> Result<Node, String> {
                     )
                     .into_ref(),
                 );
-                Ok(Node::empty_list())
+                Ok(Node::Empty)
             }
             Err(e) => {
                 vm.add_symbol(Symbol::with_value("last_status", Node::Number(255)).into_ref());
@@ -161,5 +221,31 @@ fn shell_call(vm: &mut VM, args: ConsList<Node>) -> Result<Node, String> {
             }
         }
         Ok(Node::from_hashmap(map))
+    }
+}
+
+fn shell_export(vm: &mut VM, args: ConsList<Node>) -> Result<Node, String> {
+    let args = args_setup!(args, "export", ==, 1);
+
+    if let Node::Symbol(s) = vm.eval(&args[0])? {
+        let sym_name = s.borrow().name().to_owned();
+        let real_sym = vm.symbols.borrow().get_symbol(&sym_name);
+        let real_sym_b = real_sym.borrow();
+        let value = format!("{}", real_sym_b.value());
+        env::set_var(sym_name, value);
+        Ok(Node::Empty)
+    } else {
+        Err("export requires a Symbol as the first argument".to_owned())
+    }
+}
+
+fn shell_unexport(vm: &mut VM, args: ConsList<Node>) -> Result<Node, String> {
+    let args = args_setup!(args, "unexport", ==, 1);
+
+    if let Node::Symbol(s) = vm.eval(&args[0])? {
+        env::remove_var(s.borrow().name());
+        Ok(Node::Empty)
+    } else {
+        Err("export requires a Symbol as the first argument".to_owned())
     }
 }
