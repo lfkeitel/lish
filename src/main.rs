@@ -13,7 +13,7 @@ use path_absolutize::*;
 use std::collections::HashMap;
 use std::env;
 use std::path;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 const PROMPT: &str = "lish$ ";
 
@@ -21,10 +21,11 @@ fn main() {
     let mut term = Terminal::new();
 
     let mut vm = VM::new();
-    vm.add_symbol(Symbol::new_with_builtin("exit", shell_exit).into_ref());
-    vm.add_symbol(Symbol::new_with_builtin("pwd", shell_pwd).into_ref());
-    vm.add_symbol(Symbol::new_with_builtin("cd", shell_cd).into_ref());
-    vm.add_symbol(Symbol::new_with_builtin("call", shell_call).into_ref());
+    vm.add_symbol(Symbol::with_builtin("exit", shell_exit).into_ref());
+    vm.add_symbol(Symbol::with_builtin("pwd", shell_pwd).into_ref());
+    vm.add_symbol(Symbol::with_builtin("cd", shell_cd).into_ref());
+    vm.add_symbol(Symbol::with_builtin("call", shell_call).into_ref());
+    vm.add_symbol(Symbol::with_value("interactive", Node::bool_obj(true)).into_ref());
 
     vm.set_cmd_not_found(Callable::Builtin(shell_call));
 
@@ -45,9 +46,12 @@ fn main() {
             }
         };
 
-        // println!("{:?}", tree);
         match vm.run(&tree) {
-            Ok(v) => println!("{}", v),
+            Ok(v) => {
+                if v != Node::Empty {
+                    println!("{}", v);
+                }
+            }
             Err(e) => println!("{}", e),
         }
     }
@@ -97,40 +101,65 @@ fn shell_cd(vmc: &mut VM, args: ConsList<Node>) -> Result<Node, String> {
     }
 }
 
+fn is_interactive(vm: &mut VM) -> bool {
+    let node = vm.symbols.borrow().get_symbol("interactive");
+    let node_val = node.borrow().value();
+    node_val.is_truthy()
+}
+
 fn shell_call(vm: &mut VM, args: ConsList<Node>) -> Result<Node, String> {
     let args = args_setup!(args, "call", >=, 1);
 
     let mut cmd = Command::new(format!("{}", vm.eval(&args[0])?));
+    cmd.stdin(Stdio::null());
 
     for arg in args.iter().skip(1) {
         cmd.arg(format!("{}", vm.eval(arg)?));
     }
 
-    let res = cmd.output();
-
     let mut map = HashMap::new();
 
-    match res {
-        Ok(out) => {
-            map.insert(
-                ":stdout".to_owned(),
-                Node::String(String::from_utf8(out.stdout).unwrap_or_default()),
-            );
-            map.insert(
-                ":stderr".to_owned(),
-                Node::String(String::from_utf8(out.stderr).unwrap_or_default()),
-            );
-            map.insert(
-                ":status".to_owned(),
-                Node::Number(i64::from(out.status.code().unwrap_or(255))),
-            );
-        }
-        Err(e) => {
-            map.insert(":stdout".to_owned(), Node::String("".to_owned()));
-            map.insert(":stderr".to_owned(), Node::String(format!("{}", e)));
-            map.insert(":status".to_owned(), Node::Number(255));
-        }
-    }
+    if is_interactive(vm) {
+        map.insert(":stdout".to_owned(), Node::String("".to_owned()));
 
-    Ok(Node::from_hashmap(map))
+        match cmd.status() {
+            Ok(out) => {
+                vm.add_symbol(
+                    Symbol::with_value(
+                        "last_status",
+                        Node::Number(i64::from(out.code().unwrap_or(255))),
+                    )
+                    .into_ref(),
+                );
+                Ok(Node::empty_list())
+            }
+            Err(e) => {
+                vm.add_symbol(Symbol::with_value("last_status", Node::Number(255)).into_ref());
+                Err(format!("{}", e))
+            }
+        }
+    } else {
+        match cmd.output() {
+            Ok(out) => {
+                map.insert(
+                    ":stdout".to_owned(),
+                    Node::String(String::from_utf8(out.stdout).unwrap_or_default()),
+                );
+                map.insert(
+                    ":stderr".to_owned(),
+                    Node::String(String::from_utf8(out.stderr).unwrap_or_default()),
+                );
+                map.insert(
+                    ":status".to_owned(),
+                    Node::Number(i64::from(out.status.code().unwrap_or(255))),
+                );
+            }
+            Err(e) => {
+                map.insert(":stdout".to_owned(), Node::String("".to_owned()));
+                map.insert(":stderr".to_owned(), Node::String(format!("{}", e)));
+                map.insert(":status".to_owned(), Node::Number(255));
+            }
+        }
+        Ok(Node::from_hashmap(map))
+    }
 }
