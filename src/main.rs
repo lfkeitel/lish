@@ -1,6 +1,8 @@
 mod terminal;
 
 use clap::{App, Arg};
+use path_absolutize::*;
+use shellexpand::tilde;
 use terminal::Terminal;
 
 use lazuli_vm::compiler;
@@ -11,9 +13,9 @@ use lazuli_vm::object::{Callable, Node, Symbol};
 use lazuli_vm::vm::VM;
 use lazuli_vm::{args_setup, args_setup_error};
 
-use path_absolutize::*;
 use std::collections::HashMap;
 use std::env;
+use std::ffi::OsString;
 use std::path;
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -54,6 +56,7 @@ fn setup_vm(interactive: bool) -> VM {
     vm.add_symbol(Symbol::with_builtin("pwd", shell_pwd).into_ref());
     vm.add_symbol(Symbol::with_builtin("cd", shell_cd).into_ref());
     vm.add_symbol(Symbol::with_builtin("call", shell_call).into_ref());
+    vm.add_symbol(Symbol::with_builtin("pipe", shell_pipe).into_ref());
     vm.add_symbol(Symbol::with_builtin("export", shell_export).into_ref());
     vm.add_symbol(Symbol::with_builtin("unexport", shell_unexport).into_ref());
 
@@ -137,9 +140,9 @@ fn shell_cd(vmc: &mut VM, args: ConsList<Node>) -> Result<Node, String> {
     let evaled_arg = vmc.eval(args[0])?;
 
     let new_path_str = match &evaled_arg {
-        Node::String(s) => s.to_owned(),
+        Node::String(s) => tilde(s).into_owned(),
         Node::Symbol(sym) => match sym.borrow().value() {
-            Node::String(s) => s.to_owned(),
+            Node::String(s) => tilde(&s).into_owned(),
             _ => return Err("cd expected a string".to_owned()),
         },
         _ => "".to_owned(),
@@ -156,7 +159,7 @@ fn shell_cd(vmc: &mut VM, args: ConsList<Node>) -> Result<Node, String> {
     });
 
     match res {
-        Ok(_) => Ok(Node::empty_list()),
+        Ok(_) => Ok(Node::Empty),
         Err(e) => Err(format!("{}", e)),
     }
 }
@@ -171,7 +174,6 @@ fn shell_call(vm: &mut VM, args: ConsList<Node>) -> Result<Node, String> {
     let args = args_setup!(args, "call", >=, 1);
 
     let mut cmd = Command::new(format!("{}", vm.eval(&args[0])?));
-    cmd.stdin(Stdio::null());
 
     for arg in args.iter().skip(1) {
         cmd.arg(format!("{}", vm.eval(arg)?));
@@ -199,7 +201,95 @@ fn shell_call(vm: &mut VM, args: ConsList<Node>) -> Result<Node, String> {
             }
         }
     } else {
+        cmd.stdin(Stdio::null());
+
         match cmd.output() {
+            Ok(out) => {
+                map.insert(
+                    ":stdout".to_owned(),
+                    Node::String(String::from_utf8(out.stdout).unwrap_or_default()),
+                );
+                map.insert(
+                    ":stderr".to_owned(),
+                    Node::String(String::from_utf8(out.stderr).unwrap_or_default()),
+                );
+                map.insert(
+                    ":status".to_owned(),
+                    Node::Number(i64::from(out.status.code().unwrap_or(255))),
+                );
+            }
+            Err(e) => {
+                map.insert(":stdout".to_owned(), Node::String("".to_owned()));
+                map.insert(":stderr".to_owned(), Node::String(format!("{}", e)));
+                map.insert(":status".to_owned(), Node::Number(255));
+            }
+        }
+        Ok(Node::from_hashmap(map))
+    }
+}
+
+fn shell_pipe(vm: &mut VM, args: ConsList<Node>) -> Result<Node, String> {
+    let args = args_setup!(args, "pipe", >=, 1);
+
+    let mut parent_cmd = if let Node::List(l) = args[0] {
+        let mut args: Vec<OsString> = Vec::new();
+        for arg in l.iter().skip(1) {
+            args.push(format!("{}", vm.eval(arg)?).into());
+        }
+
+        duct::cmd(
+            format!("{}", vm.eval(l.head().unwrap_or(&Node::Empty))?),
+            &args,
+        )
+    } else {
+        return Err(format!(
+            "pipe args must by lists, got {}",
+            args[0].type_str()
+        ));
+    };
+
+    for cmd in args.iter().skip(1) {
+        parent_cmd = parent_cmd.pipe(if let Node::List(l) = cmd {
+            let mut args: Vec<OsString> = Vec::new();
+            for arg in l.iter().skip(1) {
+                args.push(format!("{}", vm.eval(arg)?).into());
+            }
+
+            duct::cmd(
+                format!("{}", vm.eval(l.head().unwrap_or(&Node::Empty))?),
+                &args,
+            )
+        } else {
+            return Err(format!("pipe args must by lists, got {}", cmd.type_str()));
+        });
+    }
+
+    let mut map = HashMap::new();
+    parent_cmd = parent_cmd.unchecked();
+
+    if is_interactive(vm) {
+        match parent_cmd.run() {
+            Ok(out) => {
+                vm.add_symbol(
+                    Symbol::with_value(
+                        "last_status",
+                        Node::Number(i64::from(out.status.code().unwrap_or(255))),
+                    )
+                    .into_ref(),
+                );
+                Ok(Node::Empty)
+            }
+            Err(e) => {
+                vm.add_symbol(Symbol::with_value("last_status", Node::Number(255)).into_ref());
+                Err(format!("{}", e))
+            }
+        }
+    } else {
+        parent_cmd = parent_cmd.stdin_null();
+        parent_cmd = parent_cmd.stdout_capture();
+        parent_cmd = parent_cmd.stderr_capture();
+
+        match parent_cmd.run() {
             Ok(out) => {
                 map.insert(
                     ":stdout".to_owned(),
