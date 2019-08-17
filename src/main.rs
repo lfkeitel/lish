@@ -78,7 +78,7 @@ fn setup_vm(interactive: bool) -> VM {
 
     // Predefined variables
     vm.add_symbol(Symbol::with_value("interactive", Node::bool_obj(interactive)).into_ref());
-    vm.add_symbol(Symbol::with_value("last_status", Node::Number(0)).into_ref());
+    vm.add_symbol(Symbol::with_value("last-status", Node::Number(0)).into_ref());
 
     for (key, value) in env::vars() {
         vm.add_symbol(Symbol::with_value(&key, Node::from_string(value)).into_ref());
@@ -204,7 +204,7 @@ fn shell_call(vm: &mut VM, args: ConsList<Node>) -> Result<Node, String> {
             Ok(out) => {
                 vm.add_symbol(
                     Symbol::with_value(
-                        "last_status",
+                        "last-status",
                         Node::Number(i64::from(out.code().unwrap_or(255))),
                     )
                     .into_ref(),
@@ -212,7 +212,7 @@ fn shell_call(vm: &mut VM, args: ConsList<Node>) -> Result<Node, String> {
                 Ok(Node::Empty)
             }
             Err(e) => {
-                vm.add_symbol(Symbol::with_value("last_status", Node::Number(255)).into_ref());
+                vm.add_symbol(Symbol::with_value("last-status", Node::Number(255)).into_ref());
                 Err(format!("{}", e))
             }
         }
@@ -288,7 +288,7 @@ fn shell_pipe(vm: &mut VM, args: ConsList<Node>) -> Result<Node, String> {
             Ok(out) => {
                 vm.add_symbol(
                     Symbol::with_value(
-                        "last_status",
+                        "last-status",
                         Node::Number(i64::from(out.status.code().unwrap_or(255))),
                     )
                     .into_ref(),
@@ -296,7 +296,7 @@ fn shell_pipe(vm: &mut VM, args: ConsList<Node>) -> Result<Node, String> {
                 Ok(Node::Empty)
             }
             Err(e) => {
-                vm.add_symbol(Symbol::with_value("last_status", Node::Number(255)).into_ref());
+                vm.add_symbol(Symbol::with_value("last-status", Node::Number(255)).into_ref());
                 Err(format!("{}", e))
             }
         }
