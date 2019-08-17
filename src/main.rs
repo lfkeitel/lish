@@ -42,8 +42,24 @@ fn compile_file(path: &str) {
         eprintln!("{}", e);
         ::std::process::exit(1);
     });
+    let abs_file_path = src_path
+                    .absolutize()
+                    .unwrap_or_default()
+                    .to_str()
+                    .unwrap_or_default()
+                    .to_owned();
 
     let mut vm = setup_vm(false);
+    vm.add_symbol(
+        Symbol::with_value(
+            "curr-script-path",
+            Node::from_string(
+                abs_file_path.clone(),
+            ),
+        )
+        .into_ref(),
+    );
+    vm.add_filename(&abs_file_path);
     if let Err(e) = vm.run(&code) {
         eprintln!("Error: {}", e);
     }
