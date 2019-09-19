@@ -5,17 +5,18 @@ use path_absolutize::*;
 use shellexpand::tilde;
 use terminal::Terminal;
 
+use lazuli_vm::args_setup;
 use lazuli_vm::compiler;
 use lazuli_vm::compiler::lexer::{ByteIter, Lexer};
 use lazuli_vm::compiler::parser::Parser;
 use lazuli_vm::object::cons_list::ConsList;
-use lazuli_vm::object::{Callable, Node, Symbol};
+use lazuli_vm::object::{Callable, Node, Symbol, FALSE_KW, TRUE_KW};
 use lazuli_vm::vm::VM;
-use lazuli_vm::{args_setup, args_setup_error};
 
 use std::collections::HashMap;
 use std::env;
 use std::ffi::OsString;
+use std::io::ErrorKind as io_error_kind;
 use std::path;
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -85,6 +86,13 @@ fn setup_vm(interactive: bool) -> VM {
         vm.add_symbol(Symbol::with_value(&key, Node::from_string(value)).into_ref());
     }
 
+    // Override VM define so we can disable interactive shell during exec
+    let vm_define = vm.symbols.borrow().get_symbol("define");
+    let mut shadow_define = Symbol::new("_define");
+    shadow_define.function = vm_define.borrow().function.clone();
+    vm.add_symbol(shadow_define.into_ref());
+    vm.add_symbol(Symbol::with_builtin("define", shell_define).into_ref());
+
     vm.set_cmd_not_found(Callable::Builtin(shell_call));
     vm
 }
@@ -126,11 +134,10 @@ fn interactive_shell(startup_file: Option<&str>) {
         };
 
         match vm.run(&tree) {
-            Ok(v) => {
-                if v != Node::Empty {
-                    println!("{}", v);
-                }
-            }
+            Ok(v) => match v {
+                Node::Empty | Node::Symbol(_) => {}
+                _ => println!("{}", v),
+            },
             Err(e) => eprintln!("{}", e),
         }
     }
@@ -202,20 +209,31 @@ fn is_interactive(vm: &mut VM) -> bool {
     node_val.is_truthy()
 }
 
+fn set_interactive(vm: &mut VM, i: bool) {
+    let node_ref = vm.symbols.borrow().get_symbol("interactive");
+    let mut node = node_ref.borrow_mut();
+    if i {
+        TRUE_KW.with(|t| {
+            node.value = Some(t.clone());
+        });
+    } else {
+        FALSE_KW.with(|f| {
+            node.value = Some(f.clone());
+        });
+    }
+}
+
 fn shell_call(vm: &mut VM, args: ConsList<Node>) -> Result<Node, String> {
     let args = args_setup!(args, "call", >=, 1);
 
-    let mut cmd = Command::new(format!("{}", vm.eval(&args[0])?));
+    let command_name = vm.eval(&args[0])?;
+    let mut cmd = Command::new(format!("{}", command_name));
 
     for arg in args.iter().skip(1) {
         cmd.arg(format!("{}", vm.eval(arg)?));
     }
 
-    let mut map = HashMap::new();
-
     if is_interactive(vm) {
-        map.insert(":stdout".to_owned(), Node::String("".to_owned()));
-
         match cmd.status() {
             Ok(out) => {
                 vm.add_symbol(
@@ -228,11 +246,16 @@ fn shell_call(vm: &mut VM, args: ConsList<Node>) -> Result<Node, String> {
                 Ok(Node::Empty)
             }
             Err(e) => {
-                vm.add_symbol(Symbol::with_value("last-status", Node::Number(255)).into_ref());
-                Err(format!("{}", e))
+                vm.add_symbol(Symbol::with_value("last_status", Node::Number(255)).into_ref());
+
+                match e.kind() {
+                    io_error_kind::NotFound => Err(format!("Command not found {}", command_name)),
+                    _ => Err(format!("{}", e)),
+                }
             }
         }
     } else {
+        let mut map = HashMap::new();
         cmd.stdin(Stdio::null());
 
         match cmd.output() {
@@ -370,4 +393,15 @@ fn shell_unexport(vm: &mut VM, args: ConsList<Node>) -> Result<Node, String> {
     } else {
         Err("export requires a Symbol as the first argument".to_owned())
     }
+}
+
+fn shell_define(vm: &mut VM, args: ConsList<Node>) -> Result<Node, String> {
+    set_interactive(vm, false);
+
+    let new_args = args.append(Symbol::new("_define").into_node());
+    let ret = vm.eval_list(&new_args);
+
+    set_interactive(vm, true);
+
+    ret
 }

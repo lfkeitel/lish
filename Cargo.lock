@@ -61,7 +61,7 @@ dependencies = [
 [[package]]
 name = "lazuli_vm"
 version = "0.1.0"
-source = "git+https://github.com/lfkeitel/lazuli-lisp#5d00d0ed56d7324b5cd36bdca8feca7034c612d5"
+source = "git+https://github.com/lfkeitel/lazuli-lisp#c3599f3986e3a0df388ef7000ec92fe4207f44c6"
 
 [[package]]
 name = "lazy_static"
