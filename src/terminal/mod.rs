@@ -36,6 +36,7 @@ impl Terminal {
                     if (c as u8) == 0x0A || (c as u8) == 0x0D {
                         write!(stdout, "\n\r").unwrap();
                         stdout.flush().unwrap();
+                        self.history_item = self.history.len();
                         break;
                     }
 
@@ -45,6 +46,45 @@ impl Terminal {
                     }
                     write!(stdout, "{}", c).unwrap();
                     stdout.flush().unwrap();
+                }
+                Key::Ctrl(c) => {
+                    if c == 'c' {
+                        i = 0;
+                        self.history_item = self.history.len();
+                        write!(stdout, "\n\r\u{001b}[2K{}", prompt).unwrap();
+                        stdout.flush().unwrap();
+                    }
+                }
+                Key::Up => {
+                    if self.history_item > 0 {
+                        let item = &self.history[self.history_item - 1];
+                        write!(stdout, "\r\u{001b}[2K{}{}", prompt, item).unwrap();
+                        self.history_item -= 1;
+                        stdout.flush().unwrap();
+                        i = 0;
+                        for c in item.chars() {
+                            buf.push(c);
+                            i += 1;
+                        }
+                    }
+                }
+                Key::Down => {
+                    if self.history_item < self.history.len() - 1 {
+                        let item = &self.history[self.history_item + 1];
+                        write!(stdout, "\r\u{001b}[2K{}{}", prompt, item).unwrap();
+                        self.history_item += 1;
+                        stdout.flush().unwrap();
+                        i = 0;
+                        for c in item.chars() {
+                            buf.push(c);
+                            i += 1;
+                        }
+                    } else {
+                        i = 0;
+                        self.history_item = self.history.len();
+                        write!(stdout, "\r\u{001b}[2K{}", prompt).unwrap();
+                        stdout.flush().unwrap();
+                    }
                 }
                 Key::Backspace => {
                     if i > 0 {
