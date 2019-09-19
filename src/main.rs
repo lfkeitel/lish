@@ -27,12 +27,19 @@ fn main() {
         .version("0.1.0")
         .author("Lee Keitel")
         .about("Lazuli Lisp Shell")
+        .arg(
+            Arg::with_name("startup-file")
+                .short("s")
+                .value_name("FILE")
+                .takes_value(true)
+                .help("Startup file to source before starting interactive shell"),
+        )
         .arg(Arg::with_name("FILE"))
         .get_matches();
 
     match app.value_of("FILE") {
         Some(f) => compile_file(f),
-        None => interactive_shell(),
+        None => interactive_shell(app.value_of("startup-file")),
     }
 }
 
@@ -43,21 +50,15 @@ fn compile_file(path: &str) {
         ::std::process::exit(1);
     });
     let abs_file_path = src_path
-                    .absolutize()
-                    .unwrap_or_default()
-                    .to_str()
-                    .unwrap_or_default()
-                    .to_owned();
+        .absolutize()
+        .unwrap_or_default()
+        .to_str()
+        .unwrap_or_default()
+        .to_owned();
 
     let mut vm = setup_vm(false);
     vm.add_symbol(
-        Symbol::with_value(
-            "curr-script-path",
-            Node::from_string(
-                abs_file_path.clone(),
-            ),
-        )
-        .into_ref(),
+        Symbol::with_value("curr-script-path", Node::from_string(abs_file_path.clone())).into_ref(),
     );
     vm.add_filename(&abs_file_path);
     if let Err(e) = vm.run(&code) {
@@ -88,9 +89,24 @@ fn setup_vm(interactive: bool) -> VM {
     vm
 }
 
-fn interactive_shell() {
+fn interactive_shell(startup_file: Option<&str>) {
     let mut term = Terminal::new();
     let mut vm = setup_vm(true);
+
+    // Source startup file if one is given
+    if let Some(filename) = startup_file {
+        let src_path = Path::new(filename);
+        match compiler::compile_file(src_path) {
+            Ok(code) => {
+                vm.add_filename(src_path.absolutize().unwrap_or_default());
+                if let Err(e) = vm.run(&code) {
+                    eprintln!("Error: {}", e);
+                }
+                vm.pop_filename();
+            }
+            Err(e) => eprintln!("{}", e),
+        };
+    }
 
     loop {
         let mut line = term.readline(&PROMPT);
