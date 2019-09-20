@@ -3,7 +3,7 @@
 ## Variables
 
 All environment variables of the shell are exposed as symbols. Changing an
-environment variables only changes the variable in the shell, changes are not
+environment variable only changes the variable in the shell, changes are not
 reflected to subprocesses or outside processes. To modify an environment
 variable for a subprocess, call `(export SYM)`.
 
@@ -20,3 +20,6 @@ variable for a subprocess, call `(export SYM)`.
 - `(pipe ()[ ()...])` - Connect output and input for a chain of commands.
 - `(pwd)` - Return current working directory
 - `(unexport SYMBOL)` - Unexport environment variable.
+- `(prompt)` - Called on each interactive loop. This function must return a
+  string which will be used as the user prompt. Note that multi-line prompts
+  have a few bugs.

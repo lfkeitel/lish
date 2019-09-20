@@ -77,6 +77,7 @@ fn setup_vm(interactive: bool) -> VM {
     vm.add_symbol(Symbol::with_builtin("pipe", shell_pipe).into_ref());
     vm.add_symbol(Symbol::with_builtin("export", shell_export).into_ref());
     vm.add_symbol(Symbol::with_builtin("unexport", shell_unexport).into_ref());
+    vm.add_symbol(Symbol::with_builtin("prompt", shell_default_prompt).into_ref());
 
     // Predefined variables
     vm.add_symbol(Symbol::with_value("interactive", Node::bool_obj(interactive)).into_ref());
@@ -116,8 +117,24 @@ fn interactive_shell(startup_file: Option<&str>) {
         };
     }
 
+    let prompt_func =
+        ConsList::new().append(Symbol::with_value("prompt", Node::empty_list()).into_node());
+
     loop {
-        let mut line = term.readline(&PROMPT);
+        let mut line = match vm.eval_list(&prompt_func) {
+            Ok(node) => match node {
+                Node::String(s) => term.readline(&s),
+                _ => {
+                    println!(
+                        "prompt didn't return a String, returned {}",
+                        node.type_str()
+                    );
+                    term.readline(&PROMPT)
+                }
+            },
+            _ => term.readline(&PROMPT),
+        };
+
         if !line.starts_with('(') {
             line = format!("({})", line);
         }
@@ -141,6 +158,10 @@ fn interactive_shell(startup_file: Option<&str>) {
             Err(e) => eprintln!("{}", e),
         }
     }
+}
+
+fn shell_default_prompt(_vm: &mut VM, _args: ConsList<Node>) -> Result<Node, String> {
+    Ok(Node::from_string(PROMPT.to_string()))
 }
 
 fn shell_exit(vm: &mut VM, args: ConsList<Node>) -> Result<Node, String> {
