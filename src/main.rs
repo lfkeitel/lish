@@ -73,6 +73,7 @@ fn setup_vm(interactive: bool) -> VM {
     vm.add_symbol(Symbol::with_builtin("exit", shell_exit).into_ref());
     vm.add_symbol(Symbol::with_builtin("pwd", shell_pwd).into_ref());
     vm.add_symbol(Symbol::with_builtin("cd", shell_cd).into_ref());
+    vm.add_symbol(Symbol::with_builtin("capc", shell_captured_call).into_ref());
     vm.add_symbol(Symbol::with_builtin("call", shell_call).into_ref());
     vm.add_symbol(Symbol::with_builtin("pipe", shell_pipe).into_ref());
     vm.add_symbol(Symbol::with_builtin("export", shell_export).into_ref());
@@ -244,6 +245,13 @@ fn set_interactive(vm: &mut VM, i: bool) {
     }
 }
 
+fn shell_captured_call(vm: &mut VM, args: ConsList<Node>) -> Result<Node, String> {
+    set_interactive(vm, false);
+    let res = shell_call(vm, args);
+    set_interactive(vm, true);
+    res
+}
+
 fn shell_call(vm: &mut VM, args: ConsList<Node>) -> Result<Node, String> {
     let args = args_setup!(args, "call", >=, 1);
 
@@ -283,11 +291,21 @@ fn shell_call(vm: &mut VM, args: ConsList<Node>) -> Result<Node, String> {
             Ok(out) => {
                 map.insert(
                     ":stdout".to_owned(),
-                    Node::String(String::from_utf8(out.stdout).unwrap_or_default()),
+                    Node::String(
+                        String::from_utf8(out.stdout)
+                            .unwrap_or_default()
+                            .trim()
+                            .to_owned(),
+                    ),
                 );
                 map.insert(
                     ":stderr".to_owned(),
-                    Node::String(String::from_utf8(out.stderr).unwrap_or_default()),
+                    Node::String(
+                        String::from_utf8(out.stderr)
+                            .unwrap_or_default()
+                            .trim()
+                            .to_owned(),
+                    ),
                 );
                 map.insert(
                     ":status".to_owned(),

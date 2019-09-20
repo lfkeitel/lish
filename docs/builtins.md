@@ -13,13 +13,16 @@ variable for a subprocess, call `(export SYM)`.
 
 ## Functions
 
-- `(call)` - Call an external application, default handler for vm symbol not found.
+- `(call VAL...)` - Call an external application, default handler for vm symbol
+  not found.
+- `(capc VAL...)` - Like call but forces a map return with process output and
+  status.
 - `(cd NEW-PATH)` - Change current working directory.
 - `(exit [CODE])` - Exit shell.
 - `(export SYMBOL)` - Export environment variable.
+- `(unexport SYMBOL)` - Unexport environment variable.
 - `(pipe ()[ ()...])` - Connect output and input for a chain of commands.
 - `(pwd)` - Return current working directory
-- `(unexport SYMBOL)` - Unexport environment variable.
 - `(prompt)` - Called on each interactive loop. This function must return a
   string which will be used as the user prompt. Note that multi-line prompts
   have a few bugs.
