@@ -63,20 +63,20 @@ impl Terminal {
                         stdout.flush().unwrap();
                         i = 0;
                         for c in item.chars() {
-                            buf.push(c);
+                            buf[i] = c;
                             i += 1;
                         }
                     }
                 }
                 Key::Down => {
-                    if self.history_item < self.history.len() - 1 {
+                    if self.history_item + 1 < self.history.len() {
                         let item = &self.history[self.history_item + 1];
                         write!(stdout, "\r\u{001b}[2K{}{}", prompt, item).unwrap();
                         self.history_item += 1;
                         stdout.flush().unwrap();
                         i = 0;
                         for c in item.chars() {
-                            buf.push(c);
+                            buf[i] = c;
                             i += 1;
                         }
                     } else {
