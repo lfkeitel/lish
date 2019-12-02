@@ -1,1 +1,3 @@
-lish
+target/
+**/*.rs.bk
+private/
