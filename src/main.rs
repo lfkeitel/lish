@@ -1,6 +1,7 @@
 mod terminal;
 
 use clap::{App, Arg};
+use dirs::config_dir;
 use path_absolutize::*;
 use shellexpand::tilde;
 use terminal::Terminal;
@@ -18,7 +19,7 @@ use std::env;
 use std::ffi::OsString;
 use std::io::ErrorKind as io_error_kind;
 use std::path;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 const DEFAULT_PROMPT: &str = "lish$ ";
@@ -100,23 +101,36 @@ fn setup_vm(interactive: bool) -> VM {
     vm
 }
 
+fn get_default_rc_filepath() -> Option<PathBuf> {
+    match config_dir() {
+        Some(p) => Some(p.join("lish").join("init.lisp")),
+        None => None,
+    }
+}
+
 fn interactive_shell(startup_file: Option<&str>) {
     let mut term = Terminal::new();
     let mut vm = setup_vm(true);
 
+    let src_path = match startup_file {
+        Some(filename) => Some(Path::new(filename).to_path_buf()),
+        None => get_default_rc_filepath(),
+    };
+
     // Source startup file if one is given
-    if let Some(filename) = startup_file {
-        let src_path = Path::new(filename);
-        match compiler::compile_file(src_path) {
-            Ok(code) => {
-                vm.add_filename(src_path.absolutize().unwrap_or_default());
-                if let Err(e) = vm.run(&code) {
-                    eprintln!("Error: {}", e);
+    if let Some(filename) = src_path {
+        if filename.exists() {
+            match compiler::compile_file(&filename) {
+                Ok(code) => {
+                    vm.add_filename(filename.absolutize().unwrap_or_default());
+                    if let Err(e) = vm.run(&code) {
+                        eprintln!("Error: {}", e);
+                    }
+                    vm.pop_filename();
                 }
-                vm.pop_filename();
-            }
-            Err(e) => eprintln!("{}", e),
-        };
+                Err(e) => eprintln!("{}", e),
+            };
+        }
     }
 
     let prompt_func =
