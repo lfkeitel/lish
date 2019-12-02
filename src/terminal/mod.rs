@@ -53,7 +53,7 @@ impl Terminal {
                         write!(
                             stdout,
                             "{}{} {}",
-                            termion::cursor::Left((cursor_position) as u16),
+                            termion::cursor::Left(cursor_position as u16),
                             buf.iter().collect::<String>(),
                             termion::cursor::Left((buf_len - cursor_position + 1) as u16),
                         )
@@ -143,7 +143,7 @@ impl Terminal {
                             write!(
                                 stdout,
                                 "{}{} {}",
-                                termion::cursor::Left((cursor_position) as u16),
+                                termion::cursor::Left(cursor_position as u16),
                                 buf.iter().collect::<String>(),
                                 termion::cursor::Left((buf_len - cursor_position + 2) as u16),
                             )
@@ -166,15 +166,43 @@ impl Terminal {
                             buf_len -= 1;
                             buf[buf_len] = 0 as char;
 
-                            write!(
-                                stdout,
-                                "{}{} {}",
-                                termion::cursor::Left((cursor_position) as u16),
-                                buf.iter().collect::<String>(),
-                                termion::cursor::Left((buf_len - cursor_position + 1) as u16),
-                            )
-                            .unwrap();
+                            if cursor_position == 0 {
+                                write!(
+                                    stdout,
+                                    "{} {}",
+                                    buf.iter().collect::<String>(),
+                                    termion::cursor::Left((buf_len + 1) as u16),
+                                )
+                                .unwrap();
+                            } else {
+                                write!(
+                                    stdout,
+                                    "{}{} {}",
+                                    termion::cursor::Left(cursor_position as u16),
+                                    buf.iter().collect::<String>(),
+                                    termion::cursor::Left((buf_len - cursor_position + 1) as u16),
+                                )
+                                .unwrap();
+                            }
                         }
+                    }
+                }
+                Key::Home => {
+                    if cursor_position > 0 {
+                        write!(stdout, "{}", termion::cursor::Left(cursor_position as u16))
+                            .unwrap();
+                        cursor_position = 0;
+                    }
+                }
+                Key::End => {
+                    if cursor_position < buf_len {
+                        write!(
+                            stdout,
+                            "{}",
+                            termion::cursor::Right((buf_len - cursor_position) as u16)
+                        )
+                        .unwrap();
+                        cursor_position = buf_len;
                     }
                 }
                 _ => {}
