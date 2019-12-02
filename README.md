@@ -1,7 +1,7 @@
 # LISH
 
-Lish is a unix shell emulator written in Rust. Lish uses a lisp syntax instead of
-the traditional POSIX shell.
+Lish is a unix shell emulator written in Rust. Lish uses a lisp syntax instead
+of the traditional POSIX shell.
 
 ## Building
 
@@ -23,16 +23,16 @@ dollar sign prompt. Type in your command and have fun.
 ## Why Lisp
 
 Lisp is a rather odd choice for a shell language. I'll admit that. I choose it
-mainly out of curiosity to see if it could work. For the most part it does. There
-are a few times when the syntax gets a little messy, but I tried to design Lish
-and the Lazuli language it uses to be simple for simple commands. Allowing
-the user to use advanced syntax if needed but not force it.
+mainly out of curiosity to see if it could work. For the most part it does.
+There are a few times when the syntax gets a little messy, but I tried to design
+Lish and the [Lazuli](https://github.com/lfkeitel/lazuli-lisp) language it uses
+to be simple for simple commands. Allowing the user to use advanced syntax if
+needed but not force it.
 
 For example, when using Lish as a command prompt, the outer most parentheses
 aren't necessary. They're added in by the shell. This makes simple commands look
-like most other shells. For example the usage of echo doesn't change. `echo Hello`
-is valid Lish as it is valid POSIX sh. The only difference is internally, Lish is
-actually executing `(echo Hello)`.
+like most other shells. For example the usage of echo doesn't change. `echo Hello` is valid Lish as it is valid POSIX sh. The only difference is internally,
+Lish is actually executing `(echo Hello)`.
 
 ## Builtins
 
