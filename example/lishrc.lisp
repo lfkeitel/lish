@@ -28,9 +28,13 @@
 
 ;; git aliases
 (alias g (git))
+(alias gc (git commit))
+(alias gca (git commit -v -a))
 (alias gs (git status))
 (alias gp (git push))
 (alias gl (git pull))
+(alias ga (git add))
+(alias gaa (git add -a))
 (alias gd (git diff))
 (alias gds (git diff --staged))
 
