@@ -21,7 +21,7 @@ use std::path;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
-const PROMPT: &str = "lish$ ";
+const DEFAULT_PROMPT: &str = "lish$ ";
 
 fn main() {
     let app = App::new("Lish")
@@ -130,10 +130,10 @@ fn interactive_shell(startup_file: Option<&str>) {
                         "prompt didn't return a String, returned {}",
                         node.type_str()
                     );
-                    term.readline(&PROMPT)
+                    term.readline(&DEFAULT_PROMPT)
                 }
             },
-            _ => term.readline(&PROMPT),
+            _ => term.readline(&DEFAULT_PROMPT),
         };
 
         if !line.starts_with('(') {
@@ -162,7 +162,7 @@ fn interactive_shell(startup_file: Option<&str>) {
 }
 
 fn shell_default_prompt(_vm: &mut VM, _args: ConsList<Node>) -> Result<Node, String> {
-    Ok(Node::from_string(PROMPT.to_string()))
+    Ok(Node::from_string(DEFAULT_PROMPT.to_string()))
 }
 
 fn shell_exit(vm: &mut VM, args: ConsList<Node>) -> Result<Node, String> {
