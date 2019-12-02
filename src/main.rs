@@ -76,6 +76,7 @@ fn setup_vm(interactive: bool) -> VM {
     vm.add_symbol(Symbol::with_builtin("capc", shell_captured_call).into_ref());
     vm.add_symbol(Symbol::with_builtin("call", shell_call).into_ref());
     vm.add_symbol(Symbol::with_builtin("pipe", shell_pipe).into_ref());
+    vm.add_symbol(Symbol::with_builtin("|", shell_pipe).into_ref());
     vm.add_symbol(Symbol::with_builtin("export", shell_export).into_ref());
     vm.add_symbol(Symbol::with_builtin("unexport", shell_unexport).into_ref());
     vm.add_symbol(Symbol::with_builtin("prompt", shell_default_prompt).into_ref());
