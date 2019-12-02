@@ -25,7 +25,8 @@ impl Terminal {
             .expect("Failed to enable raw mode on std input");
 
         let mut buf = vec![0 as char; INPUT_BUF_SIZE];
-        let mut i = 0;
+        let mut buf_len = 0;
+        let mut cursor_position = 0;
 
         write!(stdout, "{}", prompt).unwrap();
         stdout.flush().unwrap();
@@ -40,19 +41,38 @@ impl Terminal {
                         break;
                     }
 
-                    buf[i] = c;
-                    if i < INPUT_BUF_SIZE {
-                        i += 1;
+                    if cursor_position == buf_len {
+                        buf[cursor_position] = c;
+                    } else {
+                        for i in (cursor_position..=buf_len).rev() {
+                            buf[i] = buf[i - 1]
+                        }
+                        buf[cursor_position] = c;
+                        buf_len += 1;
+
+                        write!(
+                            stdout,
+                            "{}{} {}",
+                            termion::cursor::Left((cursor_position) as u16),
+                            buf.iter().collect::<String>(),
+                            termion::cursor::Left((buf_len - cursor_position + 1) as u16),
+                        )
+                        .unwrap();
                     }
+
+                    if cursor_position == buf_len && buf_len < INPUT_BUF_SIZE {
+                        buf_len += 1;
+                    }
+
+                    cursor_position += 1;
                     write!(stdout, "{}", c).unwrap();
-                    stdout.flush().unwrap();
                 }
                 Key::Ctrl(c) => {
                     if c == 'c' {
-                        i = 0;
+                        buf_len = 0;
+                        cursor_position = 0;
                         self.history_item = self.history.len();
                         write!(stdout, "\n\r\u{001b}[2K{}", prompt).unwrap();
-                        stdout.flush().unwrap();
                     }
                 }
                 Key::Up => {
@@ -60,11 +80,12 @@ impl Terminal {
                         let item = &self.history[self.history_item - 1];
                         write!(stdout, "\r\u{001b}[2K{}{}", prompt, item).unwrap();
                         self.history_item -= 1;
-                        stdout.flush().unwrap();
-                        i = 0;
+                        buf_len = 0;
+                        cursor_position = 0;
                         for c in item.chars() {
-                            buf[i] = c;
-                            i += 1;
+                            buf[cursor_position] = c;
+                            buf_len += 1;
+                            cursor_position += 1;
                         }
                     }
                 }
@@ -73,38 +94,95 @@ impl Terminal {
                         let item = &self.history[self.history_item + 1];
                         write!(stdout, "\r\u{001b}[2K{}{}", prompt, item).unwrap();
                         self.history_item += 1;
-                        stdout.flush().unwrap();
-                        i = 0;
+                        buf_len = 0;
+                        cursor_position = 0;
                         for c in item.chars() {
-                            buf[i] = c;
-                            i += 1;
+                            buf[cursor_position] = c;
+                            buf_len += 1;
+                            cursor_position += 1;
                         }
                     } else {
-                        i = 0;
+                        buf_len = 0;
+                        cursor_position = 0;
                         self.history_item = self.history.len();
                         write!(stdout, "\r\u{001b}[2K{}", prompt).unwrap();
-                        stdout.flush().unwrap();
+                    }
+                }
+                Key::Left => {
+                    if cursor_position > 0 {
+                        write!(stdout, "\u{001b}[1D").unwrap();
+                        cursor_position -= 1;
+                    }
+                }
+                Key::Right => {
+                    if cursor_position < buf_len {
+                        write!(stdout, "\u{001b}[1C").unwrap();
+                        cursor_position += 1;
                     }
                 }
                 Key::Backspace => {
-                    if i > 0 {
-                        i -= 1;
-                        buf[i] = 0 as char;
-                        write!(
-                            stdout,
-                            "{} {}",
-                            termion::cursor::Left(1),
-                            termion::cursor::Left(1)
-                        )
-                        .unwrap();
-                        stdout.flush().unwrap();
+                    if buf_len > 0 {
+                        if cursor_position == buf_len {
+                            buf_len -= 1;
+                            cursor_position -= 1;
+                            buf[buf_len] = 0 as char;
+                            write!(
+                                stdout,
+                                "{} {}",
+                                termion::cursor::Left(1),
+                                termion::cursor::Left(1)
+                            )
+                            .unwrap();
+                        } else {
+                            for i in cursor_position - 1..buf_len {
+                                buf[i] = buf[i + 1]
+                            }
+                            buf_len -= 1;
+                            buf[buf_len] = 0 as char;
+
+                            write!(
+                                stdout,
+                                "{}{} {}",
+                                termion::cursor::Left((cursor_position) as u16),
+                                buf.iter().collect::<String>(),
+                                termion::cursor::Left((buf_len - cursor_position + 2) as u16),
+                            )
+                            .unwrap();
+
+                            cursor_position -= 1;
+                        }
+                    }
+                }
+                Key::Delete => {
+                    if buf_len > 0 {
+                        if cursor_position == buf_len - 1 {
+                            buf[buf_len] = 0 as char;
+                            buf_len -= 1;
+                            write!(stdout, " {}", termion::cursor::Left(1),).unwrap();
+                        } else {
+                            for i in cursor_position..buf_len {
+                                buf[i] = buf[i + 1]
+                            }
+                            buf_len -= 1;
+                            buf[buf_len] = 0 as char;
+
+                            write!(
+                                stdout,
+                                "{}{} {}",
+                                termion::cursor::Left((cursor_position) as u16),
+                                buf.iter().collect::<String>(),
+                                termion::cursor::Left((buf_len - cursor_position + 1) as u16),
+                            )
+                            .unwrap();
+                        }
                     }
                 }
                 _ => {}
             }
+            stdout.flush().unwrap();
         }
 
-        let line: String = buf[..i].iter().collect();
+        let line: String = buf[..buf_len].iter().collect();
 
         self.history.push(line.clone());
         self.history_item += 1;
