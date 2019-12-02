@@ -36,10 +36,7 @@
 
 (define config-file (current-file))
 
-;; For some reason setf panics if the file is loaded twice,
-;; need to investigate it
-(if (not (eq lishrc :t))
-    (defun reload () (include config-file)))
+(defun reload () (include config-file))
 
 ;; Notice that this file loaded correctly
 (define lishrc :t)
