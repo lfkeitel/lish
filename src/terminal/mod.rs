@@ -45,7 +45,11 @@ impl Terminal {
                         buf[cursor_position] = c;
                     } else {
                         for i in (cursor_position..=buf_len).rev() {
-                            buf[i] = buf[i - 1]
+                            if i == 0 {
+                                buf[i] = b'\0' as char;
+                            } else {
+                                buf[i] = buf[i - 1];
+                            }
                         }
                         buf[cursor_position] = c;
                         buf_len += 1;
