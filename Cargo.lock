@@ -181,7 +181,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "lazuli_vm"
 version = "0.1.0"
-source = "git+https://github.com/lfkeitel/lazuli-lisp#3d14a2b79770ef7692c34a8780074d2466df6806"
+source = "git+https://github.com/lfkeitel/lazuli-lisp#0f8283d96b82a03aee5b71d40066183378ed39f1"
 
 [[package]]
 name = "lazy_static"
