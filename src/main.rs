@@ -81,6 +81,7 @@ fn setup_vm(interactive: bool) -> VM {
     vm.add_symbol(Symbol::with_builtin("export", shell_export).into_ref());
     vm.add_symbol(Symbol::with_builtin("unexport", shell_unexport).into_ref());
     vm.add_symbol(Symbol::with_builtin("prompt", shell_default_prompt).into_ref());
+    vm.add_symbol(Symbol::with_builtin("glob", shell_glob).into_ref());
 
     // Predefined variables
     vm.add_symbol(Symbol::with_value("interactive", Node::bool_obj(interactive)).into_ref());
@@ -248,6 +249,98 @@ fn shell_cd(vmc: &mut VM, args: ConsList<Node>) -> Result<Node, String> {
     match res {
         Ok(_) => Ok(Node::Empty),
         Err(e) => Err(format!("{}", e)),
+    }
+}
+
+fn shell_glob(vmc: &mut VM, args: ConsList<Node>) -> Result<Node, String> {
+    let args = args_setup!(args, "glob", >=, 1);
+
+    let evaled_arg = vmc.eval(args[0])?;
+
+    let new_path_str = match &evaled_arg {
+        Node::String(s) => tilde(s).into_owned(),
+        Node::Symbol(sym) => match sym.borrow().value() {
+            Node::String(s) => tilde(&s).into_owned(),
+            _ => return Err("glob expected a string".to_owned()),
+        },
+        _ => "".to_owned(),
+    };
+
+    let max_depth = if args.len() > 1 {
+        match &vmc.eval(args[1])? {
+            Node::Number(i) => *i as usize,
+            Node::Symbol(sym) => match sym.borrow().value() {
+                Node::Number(i) => i as usize,
+                _ => 1,
+            },
+            _ => 1,
+        }
+    } else {
+        1
+    };
+
+    let mut list = ConsList::new();
+
+    let walker = make_glob_walker(new_path_str, max_depth)
+        .unwrap()
+        .filter_map(Result::ok);
+
+    for img in walker {
+        list = list.append(Node::from_string(
+            img.path()
+                .as_os_str()
+                .to_string_lossy()
+                .to_owned()
+                .to_string(),
+        ));
+    }
+
+    Ok(Node::List(list))
+}
+
+fn make_glob_walker<S: AsRef<str>>(
+    pattern: S,
+    max_depth: usize,
+) -> Result<globwalk::GlobWalker, globwalk::GlobError> {
+    let path_pattern: PathBuf = pattern.as_ref().into();
+    if path_pattern.is_absolute() {
+        // If the pattern is an absolute path, split it into the longest base and a pattern.
+        let mut base = PathBuf::new();
+        let mut pattern = PathBuf::new();
+        let mut globbing = false;
+
+        // All `to_str().unwrap()` calls should be valid since the input is a string.
+        for c in path_pattern.components() {
+            let os = c.as_os_str().to_str().unwrap();
+            for c in &["*", "{", "}"][..] {
+                if os.contains(c) {
+                    globbing = true;
+                    break;
+                }
+            }
+
+            if globbing {
+                pattern.push(c);
+            } else {
+                base.push(c);
+            }
+        }
+
+        let pat = pattern.to_str().unwrap();
+        if cfg!(windows) {
+            globwalk::GlobWalkerBuilder::new(base.to_str().unwrap(), pat.replace("\\", "/"))
+                .max_depth(max_depth)
+                .build()
+        } else {
+            globwalk::GlobWalkerBuilder::new(base.to_str().unwrap(), pat)
+                .max_depth(max_depth)
+                .build()
+        }
+    } else {
+        // If the pattern is relative, start searching from the current directory.
+        globwalk::GlobWalkerBuilder::new(".", pattern)
+            .max_depth(max_depth)
+            .build()
     }
 }
 
