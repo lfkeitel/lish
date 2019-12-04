@@ -88,10 +88,16 @@ impl Terminal {
 
                     if cursor_position == buf_len {
                         buf[cursor_position] = c;
+
+                        if buf_len < INPUT_BUF_SIZE {
+                            buf_len += 1;
+                        }
+
+                        write!(stdout, "{}", c).unwrap();
                     } else {
                         for i in (cursor_position..=buf_len).rev() {
                             if i == 0 {
-                                buf[i] = b'\0' as char;
+                                buf[i] = 0 as char;
                             } else {
                                 buf[i] = buf[i - 1];
                             }
@@ -99,22 +105,26 @@ impl Terminal {
                         buf[cursor_position] = c;
                         buf_len += 1;
 
+                        if cursor_position > 0 {
+                            write!(stdout, "{}", termion::cursor::Left(cursor_position as u16))
+                                .unwrap();
+                        }
+
+                        let cursor_offset = if cursor_position == 0 {
+                            buf_len - cursor_position
+                        } else {
+                            buf_len - cursor_position - 1
+                        };
+
                         write!(
                             stdout,
-                            "{}{} {}",
-                            termion::cursor::Left(cursor_position as u16),
+                            "{}{}",
                             buf.iter().collect::<String>(),
-                            termion::cursor::Left((buf_len - cursor_position + 1) as u16),
+                            termion::cursor::Left((cursor_offset) as u16),
                         )
                         .unwrap();
                     }
-
-                    if cursor_position == buf_len && buf_len < INPUT_BUF_SIZE {
-                        buf_len += 1;
-                    }
-
                     cursor_position += 1;
-                    write!(stdout, "{}", c).unwrap();
                 }
                 Key::Ctrl(c) => {
                     if c == 'c' {
