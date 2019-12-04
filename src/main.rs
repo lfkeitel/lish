@@ -108,17 +108,28 @@ fn get_default_rc_filepath() -> Option<PathBuf> {
     }
 }
 
+fn get_default_history_filepath() -> PathBuf {
+    match config_dir() {
+        Some(p) => p.join("lish").join(".history"),
+        None => PathBuf::from(".lish_history"),
+    }
+}
+
 fn interactive_shell(startup_file: Option<&str>) {
-    let mut term = Terminal::new();
+    let mut term = Terminal::new(get_default_history_filepath());
+    if let Err(e) = term.load_history() {
+        eprintln!("{}", e);
+    }
+
     let mut vm = setup_vm(true);
 
-    let src_path = match startup_file {
+    let rc_path = match startup_file {
         Some(filename) => Some(Path::new(filename).to_path_buf()),
         None => get_default_rc_filepath(),
     };
 
     // Source startup file if one is given
-    if let Some(filename) = src_path {
+    if let Some(filename) = rc_path {
         if filename.exists() {
             match compiler::compile_file(&filename) {
                 Ok(code) => {
