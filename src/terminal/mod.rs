@@ -44,7 +44,10 @@ impl Terminal {
     }
 
     fn write_history_line(&mut self, line: &str) -> io::Result<()> {
-        let mut file = OpenOptions::new().append(true).open(&self.history_file)?;
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.history_file)?;
 
         file.write_all(line.as_bytes())?;
         file.write_all(b"\n")?;
@@ -271,10 +274,12 @@ impl Terminal {
 
         let line: String = buf[..buf_len].iter().collect();
 
-        self.history.push(line.clone());
-        self.history_item += 1;
-        if let Err(e) = self.write_history_line(&line) {
-            eprintln!("{}", e);
+        if line.len() > 0 {
+            self.history.push(line.clone());
+            self.history_item += 1;
+            if let Err(e) = self.write_history_line(&line) {
+                eprintln!("{}", e);
+            }
         }
 
         line

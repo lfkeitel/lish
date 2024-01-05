@@ -17,7 +17,7 @@ use lazuli_vm::vm::VM;
 use std::collections::HashMap;
 use std::env;
 use std::ffi::OsString;
-use std::io::ErrorKind as io_error_kind;
+use std::io::ErrorKind;
 use std::path;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -119,7 +119,12 @@ fn get_default_history_filepath() -> PathBuf {
 fn interactive_shell(startup_file: Option<&str>) {
     let mut term = Terminal::new(get_default_history_filepath());
     if let Err(e) = term.load_history() {
-        eprintln!("{}", e);
+        match e.kind() {
+            ErrorKind::NotFound => {}
+            _ => {
+                eprintln!("{}", e)
+            }
+        }
     }
 
     let mut vm = setup_vm(true);
@@ -397,7 +402,7 @@ fn shell_call(vm: &mut VM, args: ConsList<Node>) -> Result<Node, String> {
                 vm.add_symbol(Symbol::with_value("last_status", Node::Number(255)).into_ref());
 
                 match e.kind() {
-                    io_error_kind::NotFound => Err(format!("Command not found {}", command_name)),
+                    ErrorKind::NotFound => Err(format!("Command not found {}", command_name)),
                     _ => Err(format!("{}", e)),
                 }
             }
