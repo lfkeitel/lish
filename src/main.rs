@@ -1,6 +1,6 @@
 mod terminal;
 
-use clap::{App, Arg};
+use clap::Parser as ClapParser;
 use dirs::config_dir;
 use path_absolutize::*;
 use shellexpand::tilde;
@@ -24,28 +24,26 @@ use std::process::{Command, Stdio};
 
 const DEFAULT_PROMPT: &str = "lish$ ";
 
-fn main() {
-    let app = App::new("Lish")
-        .version("0.1.0")
-        .author("Lee Keitel")
-        .about("Lazuli Lisp Shell")
-        .arg(
-            Arg::with_name("startup-file")
-                .short("s")
-                .value_name("FILE")
-                .takes_value(true)
-                .help("Startup file to source before starting interactive shell"),
-        )
-        .arg(Arg::with_name("FILE"))
-        .get_matches();
+#[derive(clap::Parser)]
+#[command(author, version, about)]
+struct Cli {
+    #[arg(short, long, value_name = "FILE")]
+    startup_file: Option<PathBuf>,
 
-    match app.value_of("FILE") {
-        Some(f) => compile_file(f),
-        None => interactive_shell(app.value_of("startup-file")),
+    #[arg(value_name = "SCRIPT")]
+    script: Option<PathBuf>,
+}
+
+fn main() {
+    let app = Cli::parse();
+
+    match app.script {
+        Some(f) => compile_file(&f),
+        None => interactive_shell(app.startup_file.as_ref()),
     }
 }
 
-fn compile_file(path: &str) {
+fn compile_file(path: &PathBuf) {
     let src_path = Path::new(path);
     let code = compiler::compile_file(src_path).unwrap_or_else(|e| {
         eprintln!("{}", e);
@@ -116,7 +114,7 @@ fn get_default_history_filepath() -> PathBuf {
     }
 }
 
-fn interactive_shell(startup_file: Option<&str>) {
+fn interactive_shell(startup_file: Option<&PathBuf>) {
     let mut term = Terminal::new(get_default_history_filepath());
     if let Err(e) = term.load_history() {
         match e.kind() {
